@@ -1,0 +1,73 @@
+version: "2"
+linters:
+  default: standard
+  enable:
+    - depguard
+    - errorlint
+    - gosec
+    - revive
+  settings:
+    depguard:
+      rules:
+        domain-pure:
+          files:
+            - "**/internal/domain/*.go"
+            - "!$test"
+          list-mode: strict
+          allow:
+            - $gostd
+          deny:
+            - pkg: os
+              desc: domain must not do I/O
+            - pkg: io
+              desc: domain must not do I/O
+            - pkg: io/fs
+              desc: domain must not do I/O
+            - pkg: net
+              desc: no network in the domain
+            - pkg: database/sql
+              desc: the domain parses bytes, it never opens a SQLite engine
+            - pkg: encoding/json
+              desc: serialization belongs to the adapters
+            - pkg: github.com/federiconbaez/cortex9-sqlite-forensics-mcp/internal
+              desc: domain must not depend on other layers
+        app-no-adapters:
+          files:
+            - "**/internal/app/*.go"
+            - "!$test"
+          deny:
+            - pkg: github.com/federiconbaez/cortex9-sqlite-forensics-mcp/internal/adapters
+              desc: application depends on ports, not adapters
+            - pkg: os
+              desc: application does no I/O directly
+            - pkg: database/sql
+              desc: no SQLite engine in the server
+        no-sqlite-engine-in-server:
+          files:
+            - "**/internal/adapters/**/*.go"
+            - "**/cmd/**/*.go"
+            - "!$test"
+          deny:
+            - pkg: modernc.org/sqlite
+              desc: the server never opens evidence with a SQLite engine
+            - pkg: database/sql
+              desc: the server never opens evidence with a SQLite engine
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1003"]
+    revive:
+      rules:
+        - name: exported
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # test fixtures use math/rand for reproducible seeds and fixed-size casts
+      - path: _test\.go
+        linters: [gosec]
+      # G115 in the byte parsers: every narrowing conversion is preceded by an
+      # explicit bounds check against the input length (fuzzed, see FuzzParse*)
+      - path: internal/domain/
+        text: "G115"
+formatters:
+  enable:
+    - gofmt
