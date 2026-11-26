@@ -121,3 +121,40 @@ func TestGoldenWAL(t *testing.T) {
 	}
 	t.Logf("frames=%d valid=%d commits=%d pages-differing=%d", len(w.Frames), w.ValidFrames, w.CommitFrames, differs)
 }
+
+// Rows 20..30 are deleted by the last WAL transaction. The WAL page version
+// written by that DELETE still holds them in freeblocks.
+func TestGoldenWALCarving(t *testing.T) {
+	fx, err := synth.BuildWALDB(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	walBytes, err := os.ReadFile(fx.WALPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := domain.ParseWAL(walBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cands, res := domain.CarveWALFrames(w, 0, domain.CarveOptions{})
+	found := map[string]string{}
+	for _, c := range cands {
+		for _, v := range c.Record.Values {
+			s := string(v.Bytes)
+			if v.Kind == domain.KindText && strings.HasPrefix(s, "SYNTH-MSG-") {
+				found[s[:len("SYNTH-MSG-0000")]] = c.Source + "/" + c.Confidence.String()
+			}
+		}
+	}
+	missing := 0
+	for id := 20; id <= 30; id++ {
+		if _, ok := found[synth.Marker(id)]; !ok {
+			missing++
+		}
+	}
+	t.Logf("wal candidates=%d pages=%d deleted-rows-found=%d/11 sample=%v", len(cands), res.PagesScanned, 11-missing, found[synth.Marker(25)])
+	if missing > 0 {
+		t.Fatalf("%d of the 11 deleted rows not found in WAL page versions", missing)
+	}
+}

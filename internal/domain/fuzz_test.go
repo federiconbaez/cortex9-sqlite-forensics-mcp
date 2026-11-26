@@ -51,6 +51,7 @@ func FuzzParseWAL(f *testing.F) {
 			t.Fatalf("counts %d %d %d", w.CommittedFrames, w.ValidFrames, len(w.Frames))
 		}
 		_ = SummarizeWALPages(w, in, w.Header.PageSize)
+		_, _ = CarveWALFrames(w, 0, CarveOptions{MaxCandidates: 1000})
 	})
 }
 

@@ -88,7 +88,7 @@ func exercise(t *testing.T, cs *mcp.ClientSession, fx fixture) {
 			t.Errorf("%s must be annotated read-only", tl.Name)
 		}
 	}
-	if strings.Join(names, ",") != "db_header,evidence_hash,freelist_pages,recover_cells,timeline,wal_frames" {
+	if strings.Join(names, ",") != "db_header,evidence_hash,freelist_pages,recover_cells,timeline,wal_frames,wal_recover" {
 		t.Fatalf("tools %v", names)
 	}
 	before := listDir(t, fx.evDir)
@@ -131,6 +131,13 @@ func exercise(t *testing.T, cs *mcp.ClientSession, fx fixture) {
 	if wf["commit_frames"].(float64) != 3 || wf["header"].(map[string]any)["checksum_valid"] != true || len(wf["integrity"].([]any)) != 2 {
 		t.Fatalf("%v", wf)
 	}
+	wr := call(t, cs, "wal_recover", map[string]any{"wal_path": fx.wal, "db_path": fx.db, "min_confidence": "high"})
+	if wr["count"].(float64) == 0 || len(wr["integrity"].([]any)) != 2 {
+		t.Fatalf("%v", wr["count"])
+	}
+	if c := wr["candidates"].([]any)[0].(map[string]any); c["source"] != "wal-frame-cell" || c["frame_committed"] != true {
+		t.Fatalf("%v", c)
+	}
 	// errors are tool errors, not protocol errors
 	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "db_header", Arguments: map[string]any{"path": filepath.Join(fx.evDir, "missing.db")}})
 	if err != nil || !res.IsError {
@@ -170,7 +177,7 @@ func TestInMemoryServer(t *testing.T) {
 	defer func() { _ = cs.Close() }()
 	exercise(t, cs, fx)
 	all, _ := cl.All()
-	if len(all) != 7 {
+	if len(all) != 9 {
 		t.Fatalf("custody entries %d", len(all))
 	}
 }
@@ -199,7 +206,7 @@ func TestStdioBinary(t *testing.T) {
 	}
 	_ = cs.Close()
 	b, err := os.ReadFile(fx.custody)
-	if err != nil || strings.Count(string(b), "\n") != 7 {
+	if err != nil || strings.Count(string(b), "\n") != 9 {
 		t.Fatalf("custody log lines: %v\n%s", err, b)
 	}
 }

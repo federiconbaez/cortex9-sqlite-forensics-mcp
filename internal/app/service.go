@@ -310,5 +310,50 @@ func (s *Service) Timeline(path string, w domain.TimelineWindow, limit int) (Tim
 	return out, err
 }
 
+// WALRecoverResult is the outcome of wal_recover.
+type WALRecoverResult struct {
+	Integrity  []Integrity           `json:"integrity"`
+	Candidates []domain.WALCandidate `json:"candidates"`
+	Carve      domain.CarveResult    `json:"carve"`
+	Encoding   uint32                `json:"encoding"`
+}
+
+// WALRecover carves records from every table-leaf page version in a WAL. The
+// optional main database supplies the text encoding and reserved bytes.
+func (s *Service) WALRecover(walPath, dbPath string, minConf domain.Confidence, limit int) (WALRecoverResult, error) {
+	wev, err := s.load(walPath)
+	if err != nil {
+		return WALRecoverResult{}, err
+	}
+	w, err := domain.ParseWAL(wev.bytes)
+	if err != nil {
+		return WALRecoverResult{}, err
+	}
+	enc, reserved := domain.EncodingUTF8, 0
+	var dev *evidence
+	if dbPath != "" {
+		d, h, err := s.loadDB(dbPath)
+		if err != nil {
+			return WALRecoverResult{}, err
+		}
+		enc, reserved, dev = h.TextEncoding, int(h.ReservedBytes), &d
+	}
+	cands, res := domain.CarveWALFrames(w, reserved, domain.CarveOptions{MinConfidence: minConf, MaxCandidates: limit, Encoding: enc})
+	out := WALRecoverResult{Candidates: cands, Carve: res, Encoding: enc}
+	in, err := s.finish("wal_recover", "", wev)
+	out.Integrity = append(out.Integrity, in)
+	if err != nil {
+		return out, err
+	}
+	if dev != nil {
+		in, err := s.finish("wal_recover", "main database for "+walPath, *dev)
+		out.Integrity = append(out.Integrity, in)
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
 // Now exposes the clock for adapters that need a timestamp.
 func (s *Service) Now() time.Time { return s.Clock.Now() }
