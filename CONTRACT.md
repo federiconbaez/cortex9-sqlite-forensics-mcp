@@ -45,6 +45,7 @@ databases extracted from mobile devices. Defensive and analytical use only.
 | `wal_frames` | `wal_path`, `db_path?` | WAL header, salts, checksum validity per frame, commit frames, per-page versions and diff vs main DB |
 | `freelist_pages` | `path` | trunk/leaf pages, walked count vs header count |
 | `recover_cells` | `path`, `min_confidence?`, `limit?` | carved records with page, offset, source, method, confidence |
+| `wal_recover` | `wal_path`, `db_path?`, `min_confidence?`, `limit?` | records carved from WAL page versions, with frame index and committed flag |
 | `timeline` | `path`, `from?`, `to?`, `limit?` | timestamp-looking values from carved records, sorted |
 
 ## Domain semantics

@@ -43,6 +43,13 @@ type (
 		MinConfidence string `json:"min_confidence,omitempty" jsonschema:"low, medium or high (default low)"`
 		Limit         int    `json:"limit,omitempty" jsonschema:"maximum candidates (0 = 500)"`
 	}
+	// WALRecoverInput is the wal_recover input.
+	WALRecoverInput struct {
+		WALPath       string `json:"wal_path" jsonschema:"path of the -wal file"`
+		DBPath        string `json:"db_path,omitempty" jsonschema:"optional main database (text encoding and reserved bytes)"`
+		MinConfidence string `json:"min_confidence,omitempty" jsonschema:"low, medium or high (default low)"`
+		Limit         int    `json:"limit,omitempty" jsonschema:"maximum candidates (0 = 500)"`
+	}
 	// TimelineInput is the timeline input.
 	TimelineInput struct {
 		Path  string `json:"path" jsonschema:"path of the database file"`
@@ -209,6 +216,31 @@ func New(svc *app.Service) *mcp.Server {
 		return nil, map[string]any{
 			"integrity": r.Integrity, "window_from": r.Window.From.Format(time.RFC3339),
 			"window_to": r.Window.To.Format(time.RFC3339), "events": events, "total": r.Total,
+		}, nil
+	})
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "wal_recover",
+		Description: "Carve records from every table-leaf page version stored in a -wal file: live cells of older versions (rows later deleted or edited), freeblocks and unallocated space. Each candidate names its WAL frame and whether that frame was committed.",
+		Annotations: readOnly("Recover records from WAL"),
+	}, func(_ context.Context, _ *mcp.CallToolRequest, in WALRecoverInput) (*mcp.CallToolResult, any, error) {
+		limit := in.Limit
+		if limit <= 0 {
+			limit = 500
+		}
+		r, err := svc.WALRecover(in.WALPath, in.DBPath, domain.ParseConfidence(in.MinConfidence), limit)
+		if err != nil {
+			return nil, nil, err
+		}
+		cands := make([]map[string]any, 0, len(r.Candidates))
+		for _, c := range r.Candidates {
+			m := candidateDTO(c.Candidate, r.Encoding)
+			m["wal_frame"], m["frame_committed"] = c.FrameIndex, c.Committed
+			cands = append(cands, m)
+		}
+		return nil, map[string]any{
+			"integrity": r.Integrity, "candidates": cands, "count": len(cands), "truncated": r.Carve.Truncated,
+			"page_versions_scanned": r.Carve.PagesScanned, "overflow_cells_skipped": r.Carve.OverflowCells,
+			"warnings": nonNil(r.Carve.Warnings),
 		}, nil
 	})
 	return s

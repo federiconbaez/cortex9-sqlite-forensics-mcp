@@ -107,9 +107,17 @@ func TestEveryToolVerifiesIntegrityAndRecordsCustody(t *testing.T) {
 	if err != nil || wo.ComparedDB || len(wo.Integrity) != 1 {
 		t.Fatalf("wal only %+v %v", wo, err)
 	}
+	wc, err := e.svc.WALRecover("/ev/main.db-wal", "/ev/main.db", domain.ConfidenceLow, 0)
+	if err != nil || len(wc.Candidates) == 0 || len(wc.Integrity) != 2 || wc.Encoding != domain.EncodingUTF8 {
+		t.Fatalf("wal_recover %d %v", len(wc.Candidates), err)
+	}
+	wn, err := e.svc.WALRecover("/ev/main.db-wal", "", domain.ConfidenceLow, 1)
+	if err != nil || len(wn.Candidates) != 1 || len(wn.Integrity) != 1 {
+		t.Fatalf("wal_recover no db %v", err)
+	}
 	all := e.chain(t)
-	if len(all) != 9 {
-		t.Fatalf("want 9 custody entries (one per input per call), got %d", len(all))
+	if len(all) != 12 {
+		t.Fatalf("want 12 custody entries (one per input per call), got %d", len(all))
 	}
 	if all[3].Tool != "recover_cells" || all[7].Path != "/ev/main.db" {
 		t.Fatalf("custody order %+v", all)
@@ -173,6 +181,9 @@ func TestErrorsPropagate(t *testing.T) {
 		"junk wal":          func() error { _, err := e.svc.WALFrames("/ev/junk.bin", "", 0); return err },
 		"missing wal":       func() error { _, err := e.svc.WALFrames("/ev/nope", "", 0); return err },
 		"wal with junk db":  func() error { _, err := e.svc.WALFrames("/ev/main.db-wal", "/ev/junk.bin", 0); return err },
+		"walrec junk":       func() error { _, err := e.svc.WALRecover("/ev/junk.bin", "", 0, 0); return err },
+		"walrec missing":    func() error { _, err := e.svc.WALRecover("/ev/nope", "", 0, 0); return err },
+		"walrec junk db":    func() error { _, err := e.svc.WALRecover("/ev/main.db-wal", "/ev/junk.bin", 0, 0); return err },
 		"wal with no db":    func() error { _, err := e.svc.WALFrames("/ev/main.db-wal", "/ev/nope", 0); return err },
 		"bad window": func() error {
 			_, err := e.svc.Timeline("/ev/freelist.db", domain.TimelineWindow{From: time.Now(), To: time.Now().Add(-time.Hour)}, 0)
