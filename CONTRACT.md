@@ -36,7 +36,7 @@ databases extracted from mobile devices. Defensive and analytical use only.
    SQLite engine (modernc.org/sqlite) from invented values. No real personal
    data exists in this repository.
 
-## Tools (stage 2 exposes them over MCP)
+## Tools (exposed over MCP)
 
 | Tool | Input | Output |
 | --- | --- | --- |
